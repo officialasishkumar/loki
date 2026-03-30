@@ -13,6 +13,7 @@ const (
 	EncodingKindPlain     // EncodingKindPlain is plain encoding for fixed-width types (int32, etc).
 	EncodingKindBinary    // EncodingKindBinary encodes variable-length binary data (like UTF8).
 	EncodingKindBitpacked // EncodingKindBitpacked is a bitpacked encoding for unsigned integer types.
+	EncodingKindZigZag    // EncodingKindZigZag maps signed integers to unsigned integers via zigzag encoding.
 )
 
 var kindNames = [...]string{
@@ -21,6 +22,7 @@ var kindNames = [...]string{
 	EncodingKindPlain:     "plain",
 	EncodingKindBinary:    "binary",
 	EncodingKindBitpacked: "bitpacked",
+	EncodingKindZigZag:    "zigzag",
 }
 
 // String returns the string representation of k.
