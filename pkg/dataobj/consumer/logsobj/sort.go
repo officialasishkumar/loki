@@ -78,11 +78,14 @@ func sortMergeIterator(ctx context.Context, sections []*dataobj.Section, sort lo
 		}), nil
 }
 
-// sortMergeIteratorWithSchema returns an iterator that performs a k-way merge
-// of records from multiple logs sections using schema-based sort order.
-// sortKeys maps streamID to its pre-computed sort key.
-func sortMergeIteratorWithSchema(ctx context.Context, sections []*dataobj.Section, sortKeys map[int64]string) (result.Seq[logs.Record], error) {
-	sequences := make([]*sectionSequence, 0, len(sections))
+// collectAndSortIterator collects all records from multiple logs sections,
+// sorts them by schema-based sort order, and returns an iterator over the sorted records.
+// This is used instead of k-way merge when schema sorting is enabled, because input sections
+// may be sorted by streamID rather than by schema labels, which would violate the k-way
+// merge invariant that all input sequences are sorted by the same order.
+func collectAndSortIterator(ctx context.Context, sections []*dataobj.Section, sortKeys map[int64]string) (result.Seq[logs.Record], error) {
+	var records []logs.Record
+
 	for _, s := range sections {
 		sec, err := logs.Open(ctx, s)
 		if err != nil {
@@ -108,45 +111,35 @@ func sortMergeIteratorWithSchema(ctx context.Context, sections []*dataobj.Sectio
 			return nil, fmt.Errorf("opening dataset row reader: %w", err)
 		}
 
-		sequences = append(sequences, &sectionSequence{
-			section:         sec,
-			DatasetSequence: logs.NewDatasetSequence(r, 8<<10),
-		})
+		iter := logs.NewDatasetSequence(r, 8<<10)
+		for iter.Next() {
+			row, err := iter.At().Value()
+			if err != nil {
+				iter.Close()
+				return nil, err
+			}
+
+			var record logs.Record
+			if err := logs.DecodeRow(sec.Columns(), row, &record, nil); err != nil {
+				iter.Close()
+				return nil, err
+			}
+			record.SortKey = sortKeys[record.StreamID]
+			records = append(records, record)
+		}
+		iter.Close()
 	}
 
-	maxValue := result.Value(dataset.Row{
-		Index: math.MaxInt,
-		Values: []dataset.Value{
-			dataset.Int64Value(math.MaxInt64), // StreamID
-			dataset.Int64Value(math.MinInt64), // Timestamp
-		},
-	})
+	logs.SortRecordsBySchema(records)
 
-	tree := loser.New(sequences, maxValue, sectionSequenceAt, logs.CompareForSortSchema(sortKeys), sectionSequenceClose)
-
-	return result.Iter(
-		func(yield func(logs.Record) bool) error {
-			defer tree.Close()
-			for tree.Next() {
-				seq := tree.Winner()
-
-				row, err := sectionSequenceAt(seq).Value()
-				if err != nil {
-					return err
-				}
-
-				var record logs.Record
-				err = logs.DecodeRow(seq.section.Columns(), row, &record, nil)
-				if err != nil {
-					return err
-				}
-				record.SortKey = sortKeys[record.StreamID]
-				if !yield(record) {
-					return nil
-				}
+	return result.Iter(func(yield func(logs.Record) bool) error {
+		for _, record := range records {
+			if !yield(record) {
+				return nil
 			}
-			return nil
-		}), nil
+		}
+		return nil
+	}), nil
 }
 
 type sectionSequence struct {

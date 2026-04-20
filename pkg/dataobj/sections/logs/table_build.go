@@ -84,6 +84,12 @@ func sortRecords(records []Record, sortOrder SortOrder) {
 	})
 }
 
+// SortRecordsBySchema sorts records by schema-based sort order: [sortKey ASC, timestamp DESC].
+// The SortKey field of each record must be populated before calling this function.
+func SortRecordsBySchema(records []Record) {
+	sortRecords(records, SortSchemaASC)
+}
+
 func equalRecords(a, b Record) bool {
 	if a.StreamID != b.StreamID {
 		return false
