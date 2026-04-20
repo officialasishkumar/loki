@@ -12,24 +12,23 @@ import (
 	"github.com/grafana/loki/v3/pkg/util/loser"
 )
 
-// sortMergeIterator returns an iterator that performs a k-way merge of records from multiple logs sections.
-// It requires that the input sections are sorted sorted by the same order.
-func sortMergeIterator(ctx context.Context, sections []*dataobj.Section, sort logs.SortOrder) (result.Seq[logs.Record], error) {
+// setupMergeSequences creates sectionSequence objects and a maxValue sentinel for k-way merging.
+func setupMergeSequences(ctx context.Context, sections []*dataobj.Section) ([]*sectionSequence, result.Result[dataset.Row], error) {
 	sequences := make([]*sectionSequence, 0, len(sections))
 	for _, s := range sections {
 		sec, err := logs.Open(ctx, s)
 		if err != nil {
-			return nil, fmt.Errorf("failed to open logs section: %w", err)
+			return nil, result.Result[dataset.Row]{}, fmt.Errorf("failed to open logs section: %w", err)
 		}
 
 		ds, err := logs.MakeColumnarDataset(sec)
 		if err != nil {
-			return nil, fmt.Errorf("creating columnar dataset: %w", err)
+			return nil, result.Result[dataset.Row]{}, fmt.Errorf("creating columnar dataset: %w", err)
 		}
 
 		columns, err := result.Collect(ds.ListColumns(ctx))
 		if err != nil {
-			return nil, err
+			return nil, result.Result[dataset.Row]{}, err
 		}
 
 		r := dataset.NewRowReader(dataset.RowReaderOptions{
@@ -38,7 +37,7 @@ func sortMergeIterator(ctx context.Context, sections []*dataobj.Section, sort lo
 			Prefetch: true,
 		})
 		if err := r.Open(ctx); err != nil {
-			return nil, fmt.Errorf("opening dataset row reader: %w", err)
+			return nil, result.Result[dataset.Row]{}, fmt.Errorf("opening dataset row reader: %w", err)
 		}
 
 		sequences = append(sequences, &sectionSequence{
@@ -54,6 +53,17 @@ func sortMergeIterator(ctx context.Context, sections []*dataobj.Section, sort lo
 			dataset.Int64Value(math.MinInt64), // Timestamp
 		},
 	})
+
+	return sequences, maxValue, nil
+}
+
+// sortMergeIterator returns an iterator that performs a k-way merge of records from multiple logs sections.
+// It requires that the input sections are sorted sorted by the same order.
+func sortMergeIterator(ctx context.Context, sections []*dataobj.Section, sort logs.SortOrder) (result.Seq[logs.Record], error) {
+	sequences, maxValue, err := setupMergeSequences(ctx, sections)
+	if err != nil {
+		return nil, err
+	}
 
 	tree := loser.New(sequences, maxValue, sectionSequenceAt, logs.CompareForSortOrder(sort), sectionSequenceClose)
 
@@ -82,45 +92,10 @@ func sortMergeIterator(ctx context.Context, sections []*dataobj.Section, sort lo
 // of records from multiple logs sections using schema-based sort order.
 // sortKeys maps streamID to its pre-computed sort key.
 func sortMergeIteratorWithSchema(ctx context.Context, sections []*dataobj.Section, sortKeys map[int64]string) (result.Seq[logs.Record], error) {
-	sequences := make([]*sectionSequence, 0, len(sections))
-	for _, s := range sections {
-		sec, err := logs.Open(ctx, s)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open logs section: %w", err)
-		}
-
-		ds, err := logs.MakeColumnarDataset(sec)
-		if err != nil {
-			return nil, fmt.Errorf("creating columnar dataset: %w", err)
-		}
-
-		columns, err := result.Collect(ds.ListColumns(ctx))
-		if err != nil {
-			return nil, err
-		}
-
-		r := dataset.NewRowReader(dataset.RowReaderOptions{
-			Dataset:  ds,
-			Columns:  columns,
-			Prefetch: true,
-		})
-		if err := r.Open(ctx); err != nil {
-			return nil, fmt.Errorf("opening dataset row reader: %w", err)
-		}
-
-		sequences = append(sequences, &sectionSequence{
-			section:         sec,
-			DatasetSequence: logs.NewDatasetSequence(r, 8<<10),
-		})
+	sequences, maxValue, err := setupMergeSequences(ctx, sections)
+	if err != nil {
+		return nil, err
 	}
-
-	maxValue := result.Value(dataset.Row{
-		Index: math.MaxInt,
-		Values: []dataset.Value{
-			dataset.Int64Value(math.MaxInt64), // StreamID
-			dataset.Int64Value(math.MinInt64), // Timestamp
-		},
-	})
 
 	tree := loser.New(sequences, maxValue, sectionSequenceAt, logs.CompareForSortSchema(sortKeys), sectionSequenceClose)
 

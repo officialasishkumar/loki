@@ -594,13 +594,14 @@ func (b *Builder) CopyAndSort(ctx context.Context, obj *dataobj.Object) (*dataob
 		}
 
 		lb := logs.NewBuilder(b.metrics.logs, logs.BuilderOptions{
-			PageSizeHint:     int(b.cfg.TargetPageSize),
-			PageMaxRowCount:  b.cfg.MaxPageRows,
-			BufferSize:       int(b.cfg.BufferSize),
-			StripeMergeLimit: b.cfg.SectionStripeMergeLimit,
-			AppendStrategy:   logs.AppendOrdered,
-			SortOrder:        sortOrder,
-			SchemaLabels:     schemaLabels,
+			PageSizeHint:              int(b.cfg.TargetPageSize),
+			PageMaxRowCount:           b.cfg.MaxPageRows,
+			BufferSize:                int(b.cfg.BufferSize),
+			StripeMergeLimit:          b.cfg.SectionStripeMergeLimit,
+			AppendStrategy:            logs.AppendOrdered,
+			EstimatedCompressionRatio: b.cfg.EstimatedCompressionRatio,
+			SortOrder:                 sortOrder,
+			SchemaLabels:              schemaLabels,
 		})
 		lb.SetTenant(tenant)
 
