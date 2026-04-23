@@ -1368,6 +1368,7 @@ func TestStore_MultiPeriod(t *testing.T) {
 
 			store, err := NewStore(cfg, config.ChunkStoreConfig{}, schemaConfig, limits, cm, nil, log.NewNopLogger(), constants.Loki)
 			require.NoError(t, err)
+			defer store.Stop()
 
 			// time ranges adding a chunk for each store and a chunk which overlaps both the stores
 			chunksToBuildForTimeRanges := []timeRange{
@@ -1403,12 +1404,6 @@ func TestStore_MultiPeriod(t *testing.T) {
 
 				addedChunkIDs[schemaConfig.ExternalKey(chk.ChunkRef)] = struct{}{}
 			}
-
-			// recreate the store because boltdb-shipper now runs queriers on snapshots which are created every 1 min and during startup.
-			// store.Stop()
-			// store, err = NewStore(cfg, config.ChunkStoreConfig{}, schemaConfig, limits, cm, nil, log.NewNopLogger(), constants.Loki)
-			// require.NoError(t, err)
-			// defer store.Stop()
 
 			// get all the chunks from both the stores
 			predicate := chunk.NewPredicate(newMatchers(fooLabelsWithName.String()), nil)

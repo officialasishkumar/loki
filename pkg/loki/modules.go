@@ -1905,35 +1905,6 @@ func (t *Loki) initBloomGateway() (services.Service, error) {
 }
 
 func (t *Loki) initIndexGateway() (services.Service, error) {
-	var indexClients []indexgateway.IndexClientWithRange
-
-	// code path only accessible for boltdb-shipper
-	// however, that is never true
-	// shardingStrategy := indexgateway.GetShardingStrategy(t.Cfg.IndexGateway, t.indexGatewayRingManager, t.Overrides)
-	// for i, period := range t.Cfg.SchemaConfig.Configs {
-	// 	if period.IndexType != types.IndexTypeBoltDB {
-	// 		continue
-	// 	}
-
-	// 	periodEndTime := config.DayTime{Time: math.MaxInt64}
-	// 	if i < len(t.Cfg.SchemaConfig.Configs)-1 {
-	// 		periodEndTime = config.DayTime{Time: t.Cfg.SchemaConfig.Configs[i+1].From.Add(-time.Millisecond)}
-	// 	}
-	// 	tableRange := period.GetIndexTableNumberRange(periodEndTime)
-
-	// 	indexClient, err := storage.NewIndexClient("index-store", period, tableRange, t.Cfg.StorageConfig, t.Cfg.SchemaConfig, t.Overrides, t.ClientMetrics, shardingStrategy,
-	// 		prometheus.DefaultRegisterer, log.With(util_log.Logger, "index-store", fmt.Sprintf("%s-%s", period.IndexType, period.From.String())), t.Cfg.MetricsNamespace,
-	// 	)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	indexClients = append(indexClients, indexgateway.IndexClientWithRange{
-	// 		IndexClient: indexClient,
-	// 		TableRange:  tableRange,
-	// 	})
-	// }
-
 	logger := log.With(util_log.Logger, "component", "index-gateway")
 
 	var bloomQuerier indexgateway.BloomQuerier
@@ -1946,7 +1917,7 @@ func (t *Loki) initIndexGateway() (services.Service, error) {
 		bloomQuerier = bloomgateway.NewQuerier(t.bloomGatewayClient, querierCfg, t.Overrides, resolver, prometheus.DefaultRegisterer, logger)
 	}
 
-	gateway, err := indexgateway.NewIndexGateway(t.Cfg.IndexGateway, t.Overrides, logger, prometheus.DefaultRegisterer, t.Store, indexClients, bloomQuerier)
+	gateway, err := indexgateway.NewIndexGateway(t.Cfg.IndexGateway, t.Overrides, logger, prometheus.DefaultRegisterer, t.Store, nil, bloomQuerier)
 	if err != nil {
 		return nil, err
 	}
