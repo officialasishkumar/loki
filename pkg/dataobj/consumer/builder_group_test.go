@@ -121,6 +121,41 @@ func TestTOCAlignedBuilderGroup_FactoryFailurePropagates(t *testing.T) {
 	require.ErrorContains(t, err, "boom")
 }
 
+func TestTOCAlignedBuilderGroup_AppendFailureDoesNotRetainEmptyBuilder(t *testing.T) {
+	factory := newCountingFactory(t)
+	g := NewTOCAlignedBuilderGroup(factory, math.MaxInt)
+
+	w1 := time.Date(2026, time.April, 17, 0, 0, 0, 0, time.UTC)
+
+	// Invalid LogQL labels force Builder.Append -> parseLabels to fail before
+	// the builder records anything. We want to verify that a brand-new
+	// per-window builder created for this call does not get left behind in the
+	// group's map when Append returns an error.
+	err := g.Append("tenant", logproto.Stream{
+		Labels: "not a valid label string",
+		Entries: []push.Entry{
+			windowEntry(w1, time.Minute, "a"),
+		},
+	}, w1)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "append for window")
+
+	require.Empty(t, g.GetBuilders(),
+		"a builder that never successfully appended must not be retained in the group")
+	require.Equal(t, 0, g.GetEstimatedSize())
+	require.False(t, g.IsFull())
+
+	// A subsequent valid Append for the same window must succeed, which also
+	// sanity-checks that the group is usable after the earlier failure.
+	require.NoError(t, g.Append("tenant", logproto.Stream{
+		Labels: `{app="foo"}`,
+		Entries: []push.Entry{
+			windowEntry(w1, time.Minute, "a"),
+		},
+	}, w1))
+	require.Len(t, g.GetBuilders(), 1)
+}
+
 func TestTOCAlignedBuilderGroup_IsFullBoundsTotalMemory(t *testing.T) {
 	// target is slightly larger than the memory footprint of a single entry
 	// but small enough that two windows together exceed it: this lets us
