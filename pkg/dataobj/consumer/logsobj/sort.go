@@ -1,9 +1,11 @@
 package logsobj
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/grafana/loki/v3/pkg/dataobj"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
@@ -119,6 +121,74 @@ func newSchemaMergeIterator(sequences []*sectionSequence, sortKeys map[int64]str
 			}
 			return nil
 		})
+}
+
+// sortAllRecordsWithSchema reads all records from all sections, assigns sort keys,
+// sorts them in memory by schema key, and returns an iterator over the sorted records.
+// This is used when transitioning from non-schema-sorted sections to schema-sorted sections.
+func sortAllRecordsWithSchema(
+	ctx context.Context, sections []*dataobj.Section, sortKeys map[int64]string,
+) (result.Seq[logs.Record], error) {
+	var records []logs.Record
+	for _, s := range sections {
+		sec, err := logs.Open(ctx, s)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open logs section: %w", err)
+		}
+		ds, err := logs.MakeColumnarDataset(sec)
+		if err != nil {
+			return nil, fmt.Errorf("creating columnar dataset: %w", err)
+		}
+		columns, err := result.Collect(ds.ListColumns(ctx))
+		if err != nil {
+			return nil, err
+		}
+		r := dataset.NewRowReader(dataset.RowReaderOptions{
+			Dataset:  ds,
+			Columns:  columns,
+			Prefetch: true,
+		})
+		if err := r.Open(ctx); err != nil {
+			return nil, fmt.Errorf("opening dataset row reader: %w", err)
+		}
+		seq := logs.NewDatasetSequence(r, 8<<10)
+		for seq.Next() {
+			row, err := seq.At().Value()
+			if err != nil {
+				seq.Close()
+				return nil, err
+			}
+			var record logs.Record
+			if err := logs.DecodeRow(sec.Columns(), row, &record, nil); err != nil {
+				seq.Close()
+				return nil, err
+			}
+			record.SortKey = sortKeys[record.StreamID]
+			records = append(records, record)
+		}
+		seq.Close()
+	}
+
+	sortRecordsBySchema(records)
+
+	return result.Iter(func(yield func(logs.Record) bool) error {
+		for _, rec := range records {
+			if !yield(rec) {
+				return nil
+			}
+		}
+		return nil
+	}), nil
+}
+
+// sortRecordsBySchema sorts records by [schema key ASC, timestamp DESC]
+func sortRecordsBySchema(records []logs.Record) {
+	slices.SortFunc(records, func(a, b logs.Record) int {
+		if res := cmp.Compare(a.SortKey, b.SortKey); res != 0 {
+			return res
+		}
+		return b.Timestamp.Compare(a.Timestamp)
+	})
 }
 
 func openSchemaMergeSequences(ctx context.Context, sections []*dataobj.Section) ([]*sectionSequence, error) {

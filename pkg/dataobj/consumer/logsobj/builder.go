@@ -574,14 +574,19 @@ func (b *Builder) CopyAndSort(ctx context.Context, obj *dataobj.Object) (*dataob
 			}
 		}
 
-		if len(schemaLabels) > 0 && allSectionsSchemaSorted(sections) {
+		if len(schemaLabels) > 0 {
 			sortKeys, err := buildSortKeys(ctx, obj, tenant, schemaLabels)
 			if err != nil {
 				return nil, nil, fmt.Errorf("building sort keys for tenant %s: %w", tenant, err)
 			}
 			sortOrder = logs.SortSchemaASC
-			iter, iterErr = sortMergeIteratorWithSchema(ctx, sections, sortKeys)
-			level.Debug(b.logger).Log("msg", "sort schema: merge", "tenant", tenant, "schema_labels", fmt.Sprintf("%v", schemaLabels))
+			if allSectionsSchemaSorted(sections) {
+				iter, iterErr = sortMergeIteratorWithSchema(ctx, sections, sortKeys)
+				level.Debug(b.logger).Log("msg", "sort schema: merge", "tenant", tenant, "schema_labels", fmt.Sprintf("%v", schemaLabels))
+			} else {
+				iter, iterErr = sortAllRecordsWithSchema(ctx, sections, sortKeys)
+				level.Debug(b.logger).Log("msg", "sort schema: full sort", "tenant", tenant, "schema_labels", fmt.Sprintf("%v", schemaLabels))
+			}
 		} else {
 			sortOrder = parseSortOrder(b.cfg.DataobjSortOrder)
 			iter, iterErr = sortMergeIterator(ctx, sections, sortOrder)
