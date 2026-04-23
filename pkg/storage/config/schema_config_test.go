@@ -918,7 +918,7 @@ func TestGetIndexStoreTableRanges(t *testing.T) {
 		Configs: []PeriodConfig{
 			{
 				From:       DayTime{Time: now.Add(30 * 24 * time.Hour)},
-				IndexType:  types.BoltDBShipperType,
+				IndexType:  types.IndexTypeBoltDB,
 				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v9",
 				IndexTables: IndexPeriodicTableConfig{
@@ -929,7 +929,7 @@ func TestGetIndexStoreTableRanges(t *testing.T) {
 			},
 			{
 				From:       DayTime{Time: now.Add(20 * 24 * time.Hour)},
-				IndexType:  types.BoltDBShipperType,
+				IndexType:  types.IndexTypeBoltDB,
 				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v11",
 				IndexTables: IndexPeriodicTableConfig{
@@ -941,7 +941,7 @@ func TestGetIndexStoreTableRanges(t *testing.T) {
 			},
 			{
 				From:       DayTime{Time: now.Add(15 * 24 * time.Hour)},
-				IndexType:  types.TSDBType,
+				IndexType:  types.IndexTypeTSDB,
 				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v11",
 				IndexTables: IndexPeriodicTableConfig{
@@ -953,7 +953,7 @@ func TestGetIndexStoreTableRanges(t *testing.T) {
 			},
 			{
 				From:       DayTime{Time: now.Add(5 * 24 * time.Hour)},
-				IndexType:  types.TSDBType,
+				IndexType:  types.IndexTypeTSDB,
 				ObjectType: types.StorageTypeFileSystem,
 				Schema:     "v11",
 				IndexTables: IndexPeriodicTableConfig{
@@ -977,7 +977,7 @@ func TestGetIndexStoreTableRanges(t *testing.T) {
 			End:          schemaConfig.Configs[2].From.Add(-time.Millisecond).Unix() / int64(schemaConfig.Configs[0].IndexTables.Period/time.Second),
 			PeriodConfig: &schemaConfig.Configs[1],
 		},
-	}, GetIndexStoreTableRanges(types.BoltDBShipperType, schemaConfig.Configs))
+	}, GetIndexStoreTableRanges(types.IndexTypeBoltDB, schemaConfig.Configs))
 
 	require.Equal(t, TableRanges{
 		{
@@ -990,7 +990,7 @@ func TestGetIndexStoreTableRanges(t *testing.T) {
 			End:          model.Time(math.MaxInt64).Unix() / int64(schemaConfig.Configs[0].IndexTables.Period/time.Second),
 			PeriodConfig: &schemaConfig.Configs[3],
 		},
-	}, GetIndexStoreTableRanges(types.TSDBType, schemaConfig.Configs))
+	}, GetIndexStoreTableRanges(types.IndexTypeTSDB, schemaConfig.Configs))
 }
 
 const (
