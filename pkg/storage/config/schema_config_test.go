@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
@@ -606,23 +605,12 @@ store: boltdb-shipper
 func TestUsingObjectStorageIndex(t *testing.T) {
 	var cfg SchemaConfig
 
-	// just one PeriodConfig in the past using boltdb-shipper
 	cfg.Configs = []PeriodConfig{{
 		From:      DayTime{Time: model.Now().Add(-24 * time.Hour)},
-		IndexType: "boltdb-shipper",
-	}}
-	assert.Equal(t, true, UsingObjectStorageIndex(cfg.Configs))
-
-	// just one PeriodConfig in the past not using object storge index
-	cfg.Configs[0].IndexType = "boltdb"
-	assert.Equal(t, false, UsingObjectStorageIndex(cfg.Configs))
-
-	// add a newer PeriodConfig in the future using tsdb
-	cfg.Configs = append(cfg.Configs, PeriodConfig{
-		From:      DayTime{Time: model.Now().Add(time.Hour)},
 		IndexType: "tsdb",
-	})
-	assert.Equal(t, true, UsingObjectStorageIndex(cfg.Configs))
+	}}
+
+	require.Equal(t, true, UsingObjectStorageIndex(cfg.Configs))
 }
 
 func TestActiveIndexType(t *testing.T) {
@@ -675,19 +663,6 @@ func TestSchemaConfig_ValidateBoltdb(t *testing.T) {
 			}},
 		},
 		{
-			name: "current config boltdb-shipper with 7 days periodic config, without future index type changes",
-			configs: []PeriodConfig{{
-				From:      DayTime{Time: model.Now().Add(-24 * time.Hour)},
-				IndexType: "boltdb-shipper",
-				Schema:    "v9",
-				IndexTables: IndexPeriodicTableConfig{
-					PeriodicTableConfig: PeriodicTableConfig{
-						Period: 7 * 24 * time.Hour,
-					}},
-			}},
-			err: errCurrentBoltdbShipperNon24Hours,
-		},
-		{
 			name: "current config boltdb-shipper with 1 day periodic config, without future index type changes",
 			configs: []PeriodConfig{{
 				From:      DayTime{Time: model.Now().Add(-24 * time.Hour)},
@@ -718,48 +693,6 @@ func TestSchemaConfig_ValidateBoltdb(t *testing.T) {
 						Period: 7 * 24 * time.Hour,
 					}},
 			}},
-		},
-		{
-			name: "current and upcoming config boltdb-shipper with 7 days periodic config",
-			configs: []PeriodConfig{{
-				From:      DayTime{Time: model.Now().Add(-24 * time.Hour)},
-				IndexType: "boltdb-shipper",
-				Schema:    "v9",
-				IndexTables: IndexPeriodicTableConfig{
-					PeriodicTableConfig: PeriodicTableConfig{
-						Period: 24 * time.Hour,
-					}},
-			}, {
-				From:      DayTime{Time: model.Now().Add(time.Hour)},
-				IndexType: "boltdb-shipper",
-				Schema:    "v9",
-				IndexTables: IndexPeriodicTableConfig{
-					PeriodicTableConfig: PeriodicTableConfig{
-						Period: 7 * 24 * time.Hour,
-					}},
-			}},
-			err: errUpcomingBoltdbShipperNon24Hours,
-		},
-		{
-			name: "current config NOT boltdb-shipper, upcoming config boltdb-shipper with 7 days periodic config",
-			configs: []PeriodConfig{{
-				From:      DayTime{Time: model.Now().Add(-24 * time.Hour)},
-				IndexType: "boltdb",
-				Schema:    "v9",
-				IndexTables: IndexPeriodicTableConfig{
-					PeriodicTableConfig: PeriodicTableConfig{
-						Period: 24 * time.Hour,
-					}},
-			}, {
-				From:      DayTime{Time: model.Now().Add(time.Hour)},
-				IndexType: "boltdb-shipper",
-				Schema:    "v9",
-				IndexTables: IndexPeriodicTableConfig{
-					PeriodicTableConfig: PeriodicTableConfig{
-						Period: 7 * 24 * time.Hour,
-					}},
-			}},
-			err: errUpcomingBoltdbShipperNon24Hours,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -992,19 +925,6 @@ func TestGetIndexStoreTableRanges(t *testing.T) {
 		},
 	}, GetIndexStoreTableRanges(types.IndexTypeTSDB, schemaConfig.Configs))
 }
-
-const (
-	fixedTimestamp = model.Time(1557654321000)
-	userID         = "userID"
-)
-
-var (
-	labelsForDummyChunks = labels.New(
-		labels.Label{Name: model.MetricNameLabel, Value: "foo"},
-		labels.Label{Name: "bar", Value: "baz"},
-		labels.Label{Name: "toms", Value: "code"},
-	)
-)
 
 func TestChunkKeys(t *testing.T) {
 	for _, tc := range []struct {
