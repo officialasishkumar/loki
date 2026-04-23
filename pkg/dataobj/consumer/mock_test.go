@@ -194,9 +194,6 @@ type mockFlushCommitter struct {
 }
 
 func (m *mockFlushCommitter) Flush(_ context.Context, builders []builder, reason string, offset int64) error {
-	if len(builders) == 0 {
-		return nil
-	}
 	m.flushes++
 	m.lastBuilderCount = len(builders)
 	m.lastReason = reason

@@ -151,6 +151,17 @@ func (m *canceledFlushCommitter) Flush(_ context.Context, _ []builder, _ string,
 	return fmt.Errorf("failed to flush data object: %w", context.Canceled)
 }
 
+// transientErrFlushCommitter returns a non-context.Canceled error. It is used
+// to simulate the case where a transient error (e.g., a Kafka network blip)
+// surfaces from the flushCommitter's retry loop on its last attempt while the
+// context was canceled during the wait, so the returned error does not wrap
+// context.Canceled.
+type transientErrFlushCommitter struct{}
+
+func (m *transientErrFlushCommitter) Flush(_ context.Context, _ []builder, _ string, _ int64) error {
+	return errors.New("transient kafka error")
+}
+
 func TestPartitionProcessor_Flush(t *testing.T) {
 	t.Run("should succeed", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
@@ -227,6 +238,41 @@ func TestPartitionProcessor_Flush(t *testing.T) {
 
 			rec := newTestRecord(t, "tenant", time.Now())
 			require.NoError(t, proc.processRecord(ctx, rec))
+
+			time.Sleep(time.Second)
+			require.NotPanics(t, func() {
+				err := proc.flush(ctx, "forced")
+				require.ErrorIs(t, err, context.Canceled)
+			})
+		})
+	})
+
+	t.Run("should not panic when ctx is canceled but flushCommitter error does not wrap context.Canceled", func(t *testing.T) {
+		// The emitEvent/commit backoff loops in the real flushCommitter
+		// return the last retry attempt's error when the context is
+		// canceled. If the last attempt hit a transient error (e.g., a
+		// Kafka network blip) while the context was canceled during
+		// b.Wait(), the returned error does not wrap context.Canceled.
+		// The processor must still detect the shutdown via ctx.Err() and
+		// return cleanly rather than panic.
+		synctest.Test(t, func(t *testing.T) {
+			var (
+				rootCtx        = t.Context()
+				reg            = prometheus.NewRegistry()
+				builder        = newTestBuilder(t, reg)
+				group          = newMockBuilderGroup(builder)
+				flushCommitter = &transientErrFlushCommitter{}
+				proc           = newProcessor(group, nil, flushCommitter, 5*time.Minute, 30*time.Minute, log.NewNopLogger(), reg)
+			)
+
+			rec := newTestRecord(t, "tenant", time.Now())
+			require.NoError(t, proc.processRecord(rootCtx, rec))
+
+			// Cancel the context before the flush to simulate a graceful
+			// shutdown that races with a transient error on the last
+			// retry attempt.
+			ctx, cancel := context.WithCancel(rootCtx)
+			cancel()
 
 			time.Sleep(time.Second)
 			require.NotPanics(t, func() {

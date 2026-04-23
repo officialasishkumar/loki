@@ -251,6 +251,10 @@ func (p *processor) flush(ctx context.Context, reason string) error {
 	if errors.Is(err, context.Canceled) {
 		return err
 	}
+	if ctx.Err() != nil {
+		level.Info(p.logger).Log("msg", "flush returned a non-cancellation error while the context was canceled", "reason", reason, "err", err)
+		return ctx.Err()
+	}
 	// logsobj.Builder.Flush is not re-entrant: once it consumes the buffered
 	// state, a retry cannot reproduce the object. Any flushCommitter error
 	// that isn't a graceful shutdown therefore escalates to a panic so the
