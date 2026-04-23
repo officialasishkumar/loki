@@ -1195,20 +1195,21 @@ func (i *Ingester) QuerySample(req *logproto.SampleQueryRequest, queryServer log
 	return sendSampleBatches(ctx, it, queryServer)
 }
 
-// asyncStoreMaxLookBack returns a max look back period only if active index type is one of async index stores like `boltdb-shipper` and `tsdb`.
+// asyncStoreMaxLookBack returns a max look back period only if active index type is `tsdb`.
 // max look back is limited to from time of async store config.
 // It considers previous periodic config's from time if that also has async index type.
 // This is to limit the lookback to only async stores where relevant.
 func (i *Ingester) asyncStoreMaxLookBack() time.Duration {
 	activePeriodicConfigIndex := config.ActivePeriodConfig(i.periodicConfigs)
 	activePeriodicConfig := i.periodicConfigs[activePeriodicConfigIndex]
-	if activePeriodicConfig.IndexType != types.IndexTypeBoltDB && activePeriodicConfig.IndexType != types.IndexTypeTSDB {
+
+	// TODO(chaudum): Always evaluates to `false`, so can be removed.
+	if activePeriodicConfig.IndexType != types.IndexTypeTSDB {
 		return 0
 	}
 
 	startTime := activePeriodicConfig.From
-	if activePeriodicConfigIndex != 0 && (i.periodicConfigs[activePeriodicConfigIndex-1].IndexType == types.IndexTypeBoltDB ||
-		i.periodicConfigs[activePeriodicConfigIndex-1].IndexType == types.IndexTypeTSDB) {
+	if activePeriodicConfigIndex != 0 && (i.periodicConfigs[activePeriodicConfigIndex-1].IndexType == types.IndexTypeTSDB) {
 		startTime = i.periodicConfigs[activePeriodicConfigIndex-1].From
 	}
 

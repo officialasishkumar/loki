@@ -42,10 +42,8 @@ var (
 	errConfigFileNotSet         = errors.New("schema config file needs to be set")
 	errSchemaIncreasingFromTime = errors.New("from time in schemas must be distinct and in increasing order")
 
-	errCurrentBoltdbShipperNon24Hours  = errors.New("boltdb-shipper works best with 24h periodic index config. Either add a new config with future date set to 24h to retain the existing index or change the existing config to use 24h period")
-	errUpcomingBoltdbShipperNon24Hours = errors.New("boltdb-shipper with future date must always have periodic config for index set to 24h")
-	errTSDBNon24HoursIndexPeriod       = errors.New("tsdb must always have periodic config for index set to 24h")
-	errZeroLengthConfig                = errors.New("must specify at least one schema configuration")
+	errTSDBNon24HoursIndexPeriod = errors.New("tsdb must always have periodic config for index set to 24h")
+	errZeroLengthConfig          = errors.New("must specify at least one schema configuration")
 
 	// regexp for finding the trailing index table number at the end of the table name
 	extractTableNumberRegex = regexp.MustCompile(`[0-9]+$`)
@@ -311,19 +309,6 @@ func (cfg *SchemaConfig) Validate() error {
 	if len(cfg.Configs) == 0 {
 		return errZeroLengthConfig
 	}
-	activePCIndex := ActivePeriodConfig((*cfg).Configs)
-
-	// if current index type is boltdb-shipper and there are no upcoming index types then it should be set to 24 hours.
-	if cfg.Configs[activePCIndex].IndexType == types.IndexTypeBoltDB &&
-		cfg.Configs[activePCIndex].IndexTables.Period != ObjectStorageIndexRequiredPeriod && len(cfg.Configs)-1 == activePCIndex {
-		return errCurrentBoltdbShipperNon24Hours
-	}
-
-	// if upcoming index type is boltdb-shipper, it should always be set to 24 hours.
-	if len(cfg.Configs)-1 > activePCIndex && (cfg.Configs[activePCIndex+1].IndexType == types.IndexTypeBoltDB &&
-		cfg.Configs[activePCIndex+1].IndexTables.Period != ObjectStorageIndexRequiredPeriod) {
-		return errUpcomingBoltdbShipperNon24Hours
-	}
 
 	for i := range cfg.Configs {
 		periodCfg := &cfg.Configs[i]
@@ -365,9 +350,10 @@ func usingForPeriodConfigs(configs []PeriodConfig, fn func(string) bool) bool {
 	return false
 }
 
-// IsObjectStorageIndex returns true if the index type is either boltdb-shipper or tsdb.
+// IsObjectStorageIndex returns true if the index type is tsdb.
+// Always returns `true`, so the function can be cleaned up in the future.
 func IsObjectStorageIndex(indexType string) bool {
-	return indexType == types.IndexTypeBoltDB || indexType == types.IndexTypeTSDB
+	return indexType == types.IndexTypeTSDB
 }
 
 // UsingObjectStorageIndex returns true if the current or any of the upcoming periods

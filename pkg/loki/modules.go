@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"math"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -85,8 +84,6 @@ import (
 	"github.com/grafana/loki/v3/pkg/storage/config"
 	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/bloomshipper"
 	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/indexshipper"
-	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/indexshipper/boltdb"
-	boltdbcompactor "github.com/grafana/loki/v3/pkg/storage/stores/shipper/indexshipper/boltdb/compactor"
 	"github.com/grafana/loki/v3/pkg/storage/stores/shipper/indexshipper/tsdb"
 	"github.com/grafana/loki/v3/pkg/storage/types"
 	"github.com/grafana/loki/v3/pkg/ui"
@@ -958,15 +955,12 @@ func (t *Loki) initBloomStore() (services.Service, error) {
 
 func (t *Loki) updateConfigForShipperStore() {
 	// Always set these configs
-	t.Cfg.StorageConfig.BoltDBShipperConfig.IndexGatewayClientConfig.Mode = t.Cfg.IndexGateway.Mode
 	t.Cfg.StorageConfig.TSDBShipperConfig.IndexGatewayClientConfig.Mode = t.Cfg.IndexGateway.Mode
 
 	if t.Cfg.IndexGateway.Mode == indexgateway.RingMode {
-		t.Cfg.StorageConfig.BoltDBShipperConfig.IndexGatewayClientConfig.Ring = t.indexGatewayRingManager.Ring
 		t.Cfg.StorageConfig.TSDBShipperConfig.IndexGatewayClientConfig.Ring = t.indexGatewayRingManager.Ring
 	}
 
-	t.Cfg.StorageConfig.BoltDBShipperConfig.IngesterName = t.Cfg.Ingester.LifecyclerConfig.ID
 	t.Cfg.StorageConfig.TSDBShipperConfig.IngesterName = t.Cfg.Ingester.LifecyclerConfig.ID
 
 	// If RF > 1 and current or upcoming index type is boltdb-shipper then disable index dedupe and write dedupe cache.
@@ -993,21 +987,15 @@ func (t *Loki) updateConfigForShipperStore() {
 		}
 
 		// We do not want ingester to unnecessarily keep downloading files
-		t.Cfg.StorageConfig.BoltDBShipperConfig.Mode = indexshipper.ModeWriteOnly
-		t.Cfg.StorageConfig.BoltDBShipperConfig.IngesterDBRetainPeriod = shipperQuerierIndexUpdateDelay(t.Cfg.StorageConfig.IndexCacheValidity, t.Cfg.StorageConfig.BoltDBShipperConfig.ResyncInterval)
-
 		t.Cfg.StorageConfig.TSDBShipperConfig.Mode = indexshipper.ModeWriteOnly
 		t.Cfg.StorageConfig.TSDBShipperConfig.IngesterDBRetainPeriod = shipperQuerierIndexUpdateDelay(t.Cfg.StorageConfig.IndexCacheValidity, t.Cfg.StorageConfig.TSDBShipperConfig.ResyncInterval)
 
 	case t.Cfg.isTarget(Querier), t.Cfg.isTarget(Ruler), t.Cfg.isTarget(Read), t.Cfg.isTarget(Backend), t.isModuleActive(IndexGateway), t.Cfg.isTarget(BloomPlanner), t.Cfg.isTarget(BloomBuilder):
 		// We do not want query to do any updates to index
-		t.Cfg.StorageConfig.BoltDBShipperConfig.Mode = indexshipper.ModeReadOnly
 		t.Cfg.StorageConfig.TSDBShipperConfig.Mode = indexshipper.ModeReadOnly
 
 	default:
 		// All other targets use the shipper store in RW mode
-		t.Cfg.StorageConfig.BoltDBShipperConfig.Mode = indexshipper.ModeReadWrite
-		t.Cfg.StorageConfig.BoltDBShipperConfig.IngesterDBRetainPeriod = shipperQuerierIndexUpdateDelay(t.Cfg.StorageConfig.IndexCacheValidity, t.Cfg.StorageConfig.BoltDBShipperConfig.ResyncInterval)
 		t.Cfg.StorageConfig.TSDBShipperConfig.Mode = indexshipper.ModeReadWrite
 		t.Cfg.StorageConfig.TSDBShipperConfig.IngesterDBRetainPeriod = shipperQuerierIndexUpdateDelay(t.Cfg.StorageConfig.IndexCacheValidity, t.Cfg.StorageConfig.TSDBShipperConfig.ResyncInterval)
 	}
@@ -1018,7 +1006,7 @@ func (t *Loki) setupAsyncStore() error {
 
 	shipperConfigIdx := config.ActivePeriodConfig(t.Cfg.SchemaConfig.Configs)
 	iTy := t.Cfg.SchemaConfig.Configs[shipperConfigIdx].IndexType
-	if iTy != types.IndexTypeBoltDB && iTy != types.IndexTypeTSDB {
+	if iTy != types.IndexTypeTSDB {
 		shipperConfigIdx++
 	}
 
@@ -1043,13 +1031,11 @@ func (t *Loki) setupAsyncStore() error {
 
 		// The legacy Read target includes the index gateway, so disable the index-gateway client in that configuration.
 		if t.Cfg.LegacyReadTarget && t.Cfg.isTarget(Read) {
-			t.Cfg.StorageConfig.BoltDBShipperConfig.IndexGatewayClientConfig.Disabled = true
 			t.Cfg.StorageConfig.TSDBShipperConfig.IndexGatewayClientConfig.Disabled = true
 		}
 		// Backend target includes the index gateway
 	case t.Cfg.isTarget(IndexGateway), t.Cfg.isTarget(Backend):
 		// we want to use the actual storage when running the index-gateway, so we remove the Addr from the config
-		t.Cfg.StorageConfig.BoltDBShipperConfig.IndexGatewayClientConfig.Disabled = true
 		t.Cfg.StorageConfig.TSDBShipperConfig.IndexGatewayClientConfig.Disabled = true
 	case t.Cfg.isTarget(All):
 		// We want ingester to also query the store when using boltdb-shipper but only when running with target All.
@@ -1877,7 +1863,6 @@ func (t *Loki) initCompactor() (services.Service, error) {
 		return nil, err
 	}
 
-	t.compactor.RegisterIndexCompactor(types.IndexTypeBoltDB, boltdbcompactor.NewIndexCompactor())
 	t.compactor.RegisterIndexCompactor(types.IndexTypeTSDB, tsdb.NewIndexCompactor())
 	prefix, compactorHandler := t.compactor.Handler()
 	t.Server.HTTP.PathPrefix(prefix).Handler(compactorHandler)
@@ -1920,32 +1905,34 @@ func (t *Loki) initBloomGateway() (services.Service, error) {
 }
 
 func (t *Loki) initIndexGateway() (services.Service, error) {
-	shardingStrategy := indexgateway.GetShardingStrategy(t.Cfg.IndexGateway, t.indexGatewayRingManager, t.Overrides)
-
 	var indexClients []indexgateway.IndexClientWithRange
-	for i, period := range t.Cfg.SchemaConfig.Configs {
-		if period.IndexType != types.IndexTypeBoltDB {
-			continue
-		}
 
-		periodEndTime := config.DayTime{Time: math.MaxInt64}
-		if i < len(t.Cfg.SchemaConfig.Configs)-1 {
-			periodEndTime = config.DayTime{Time: t.Cfg.SchemaConfig.Configs[i+1].From.Add(-time.Millisecond)}
-		}
-		tableRange := period.GetIndexTableNumberRange(periodEndTime)
+	// code path only accessible for boltdb-shipper
+	// however, that is never true
+	// shardingStrategy := indexgateway.GetShardingStrategy(t.Cfg.IndexGateway, t.indexGatewayRingManager, t.Overrides)
+	// for i, period := range t.Cfg.SchemaConfig.Configs {
+	// 	if period.IndexType != types.IndexTypeBoltDB {
+	// 		continue
+	// 	}
 
-		indexClient, err := storage.NewIndexClient("index-store", period, tableRange, t.Cfg.StorageConfig, t.Cfg.SchemaConfig, t.Overrides, t.ClientMetrics, shardingStrategy,
-			prometheus.DefaultRegisterer, log.With(util_log.Logger, "index-store", fmt.Sprintf("%s-%s", period.IndexType, period.From.String())), t.Cfg.MetricsNamespace,
-		)
-		if err != nil {
-			return nil, err
-		}
+	// 	periodEndTime := config.DayTime{Time: math.MaxInt64}
+	// 	if i < len(t.Cfg.SchemaConfig.Configs)-1 {
+	// 		periodEndTime = config.DayTime{Time: t.Cfg.SchemaConfig.Configs[i+1].From.Add(-time.Millisecond)}
+	// 	}
+	// 	tableRange := period.GetIndexTableNumberRange(periodEndTime)
 
-		indexClients = append(indexClients, indexgateway.IndexClientWithRange{
-			IndexClient: indexClient,
-			TableRange:  tableRange,
-		})
-	}
+	// 	indexClient, err := storage.NewIndexClient("index-store", period, tableRange, t.Cfg.StorageConfig, t.Cfg.SchemaConfig, t.Overrides, t.ClientMetrics, shardingStrategy,
+	// 		prometheus.DefaultRegisterer, log.With(util_log.Logger, "index-store", fmt.Sprintf("%s-%s", period.IndexType, period.From.String())), t.Cfg.MetricsNamespace,
+	// 	)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+
+	// 	indexClients = append(indexClients, indexgateway.IndexClientWithRange{
+	// 		IndexClient: indexClient,
+	// 		TableRange:  tableRange,
+	// 	})
+	// }
 
 	logger := log.With(util_log.Logger, "component", "index-gateway")
 
@@ -1983,7 +1970,6 @@ func (t *Loki) initIndexGatewayRing() (_ services.Service, err error) {
 		return
 	}
 
-	t.Cfg.StorageConfig.BoltDBShipperConfig.Mode = indexshipper.ModeReadOnly
 	t.Cfg.StorageConfig.TSDBShipperConfig.Mode = indexshipper.ModeReadOnly
 
 	managerMode := lokiring.ClientMode
@@ -2564,7 +2550,8 @@ func shipperQuerierIndexUpdateDelay(cacheValidity, resyncInterval time.Duration)
 
 // shipperIngesterIndexUploadDelay returns duration it could take for an index file containing id of a chunk to be uploaded to the shared store since it got flushed.
 func shipperIngesterIndexUploadDelay() time.Duration {
-	return boltdb.ShardDBsByDuration + indexshipper.UploadInterval
+	shardDBsByDuration := 15 * time.Minute // TODO(chaudum): This was copied from boltdb-shipper but is also used by tsdb-shipper
+	return shardDBsByDuration + indexshipper.UploadInterval
 }
 
 // shipperMinIngesterQueryStoreDuration returns minimum duration(with some buffer) ingesters should query their stores to
@@ -2573,18 +2560,16 @@ func shipperMinIngesterQueryStoreDuration(maxChunkAge, querierUpdateDelay time.D
 	return maxChunkAge + shipperIngesterIndexUploadDelay() + querierUpdateDelay + 5*time.Minute
 }
 
-// shipperResyncInterval returns the resync interval for the active shipper index type i.e boltdb-shipper | tsdb
+// shipperResyncInterval returns the resync interval for the active shipper index type (always tsdb)
 func shipperResyncInterval(storageConfig storage.Config, schemaConfigs []config.PeriodConfig) time.Duration {
 	shipperConfigIdx := config.ActivePeriodConfig(schemaConfigs)
 	iTy := schemaConfigs[shipperConfigIdx].IndexType
-	if iTy != types.IndexTypeBoltDB && iTy != types.IndexTypeTSDB {
+	if iTy != types.IndexTypeTSDB {
 		shipperConfigIdx++
 	}
 
 	var resyncInterval time.Duration
 	switch schemaConfigs[shipperConfigIdx].IndexType {
-	case types.IndexTypeBoltDB:
-		resyncInterval = storageConfig.BoltDBShipperConfig.ResyncInterval
 	case types.IndexTypeTSDB:
 		resyncInterval = storageConfig.TSDBShipperConfig.ResyncInterval
 	}
@@ -2651,11 +2636,5 @@ func (dh ignoreSignalHandler) Stop() {
 }
 
 func schemaHasBoltDBShipperConfig(scfg config.SchemaConfig) bool {
-	for _, cfg := range scfg.Configs {
-		if cfg.IndexType == types.IndexTypeBoltDB {
-			return true
-		}
-	}
-
 	return false
 }
