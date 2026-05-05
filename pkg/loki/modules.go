@@ -1015,7 +1015,7 @@ func (t *Loki) setupAsyncStore() error {
 
 	shipperConfigIdx := config.ActivePeriodConfig(t.Cfg.SchemaConfig.Configs)
 	iTy := t.Cfg.SchemaConfig.Configs[shipperConfigIdx].IndexType
-	if iTy != types.IndexTypeTSDB {
+	if iTy != types.IndexTypeBoltDB && iTy != types.IndexTypeTSDB {
 		shipperConfigIdx++
 	}
 
@@ -2575,11 +2575,11 @@ func shipperMinIngesterQueryStoreDuration(maxChunkAge, querierUpdateDelay time.D
 	return maxChunkAge + shipperIngesterIndexUploadDelay() + querierUpdateDelay + 5*time.Minute
 }
 
-// shipperResyncInterval returns the resync interval for the active shipper index type (always tsdb)
+// shipperResyncInterval returns the resync interval for the active shipper index type.
 func shipperResyncInterval(storageConfig storage.Config, schemaConfigs []config.PeriodConfig) time.Duration {
 	shipperConfigIdx := config.ActivePeriodConfig(schemaConfigs)
 	iTy := schemaConfigs[shipperConfigIdx].IndexType
-	if iTy != types.IndexTypeTSDB {
+	if iTy != types.IndexTypeBoltDB && iTy != types.IndexTypeTSDB {
 		shipperConfigIdx++
 	}
 
