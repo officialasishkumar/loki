@@ -23,6 +23,11 @@ var jobRename = `
 - regex: ^swarm_stack$
   action: labeldrop`
 
+var dropConfig = `
+- source_labels: [swarm_stack]
+  regex: foo
+  action: drop`
+
 func Test_relabelConfig(t *testing.T) {
 
 	tests := []struct {
@@ -44,6 +49,13 @@ func Test_relabelConfig(t *testing.T) {
 			jobRename,
 			model.LabelSet{"swarm_stack": "foo", "bar": "buzz"},
 			model.LabelSet{"job": "foo", "bar": "buzz"},
+			false,
+		},
+		{
+			"drop keeps labels",
+			dropConfig,
+			model.LabelSet{"swarm_stack": "foo", "bar": "buzz"},
+			model.LabelSet{"swarm_stack": "foo", "bar": "buzz"},
 			false,
 		},
 	}

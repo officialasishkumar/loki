@@ -373,9 +373,7 @@ func relabelConfig(config string, lbs model.LabelSet) (model.LabelSet, error) {
 		}
 	}
 	lb := labels.NewBuilder(labels.FromMap(util.ModelLabelSetToMap(lbs)))
-	if keep := relabel.ProcessBuilder(lb, relabelConfig...); !keep {
-		return nil, nil
-	}
+	relabel.ProcessBuilder(lb, relabelConfig...)
 	return model.LabelSet(util.LabelsToMetric(lb.Labels())), nil
 }
 
