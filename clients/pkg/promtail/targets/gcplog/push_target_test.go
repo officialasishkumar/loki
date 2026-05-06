@@ -258,6 +258,46 @@ func TestPushTarget_UseIncomingTimestamp(t *testing.T) {
 	require.Equal(t, expectedTs, eh.Received()[0].Timestamp, "expected entry timestamp to be overridden by received one")
 }
 
+func TestPushTarget_DroppedEntryIsAcknowledged(t *testing.T) {
+	w := log.NewSyncWriter(os.Stderr)
+	logger := log.NewLogfmtLogger(w)
+
+	eh := fake.New(func() {})
+	defer eh.Stop()
+
+	serverConfig, port, err := gcplog.GetServerConfigWithAvailablePort()
+	require.NoError(t, err, "error generating server config or finding open port")
+	config := &scrapeconfig.GcplogTargetConfig{
+		Server:           serverConfig,
+		SubscriptionType: "push",
+	}
+
+	prometheus.DefaultRegisterer = prometheus.NewRegistry()
+	metrics := gcplog.NewMetrics(prometheus.DefaultRegisterer)
+	relabelConfigs := testutils.ValidateRelabelConfig(t, []*relabel.Config{
+		{
+			SourceLabels: model.LabelNames{"__gcp_logname"},
+			Regex:        relabel.MustNewRegexp(".*"),
+			Action:       relabel.Drop,
+		},
+	})
+	pt, err := gcplog.NewGCPLogTarget(metrics, logger, eh, relabelConfigs, t.Name()+"_test_job", config)
+	require.NoError(t, err)
+	defer func() {
+		_ = pt.Stop()
+	}()
+
+	req, err := makeGCPPushRequest(fmt.Sprintf("http://%s:%d", localhost, port), testPayload)
+	require.NoError(t, err, "expected request to be created successfully")
+	res, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, res.StatusCode, "expected dropped entry to be acknowledged")
+
+	require.Never(t, func() bool {
+		return len(eh.Received()) > 0
+	}, 100*time.Millisecond, 10*time.Millisecond)
+}
+
 func TestPushTarget_UseTenantIDHeaderIfPresent(t *testing.T) {
 	w := log.NewSyncWriter(os.Stderr)
 	logger := log.NewLogfmtLogger(w)

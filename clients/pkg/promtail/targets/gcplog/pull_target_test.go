@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/grafana/dskit/backoff"
-	"github.com/pkg/errors"
 
 	"cloud.google.com/go/pubsub"
 	"github.com/go-kit/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -88,6 +89,30 @@ func TestPullTarget_RunStop(t *testing.T) {
 
 		require.NoError(t, tc.target.Stop())
 	})
+}
+
+func TestPullTarget_DroppedEntryIsAcknowledged(t *testing.T) {
+	tc := testPullTarget(t)
+	tc.target.relabelConfig = []*relabel.Config{
+		{
+			SourceLabels: model.LabelNames{"__gcp_logname"},
+			Regex:        relabel.MustNewRegexp(".*"),
+			Action:       relabel.Drop,
+		},
+	}
+
+	runErr := make(chan error)
+	go func() {
+		runErr <- tc.target.run()
+	}()
+
+	tc.sub.messages <- &pubsub.Message{Data: []byte(gcpLogEntry)}
+	require.Never(t, func() bool {
+		return len(tc.promClient.Received()) > 0
+	}, 100*time.Millisecond, 10*time.Millisecond)
+
+	require.NoError(t, tc.target.Stop())
+	require.EqualError(t, <-runErr, "context canceled")
 }
 
 func TestPullTarget_Type(t *testing.T) {
