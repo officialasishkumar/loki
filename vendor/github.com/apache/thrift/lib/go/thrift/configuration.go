@@ -317,13 +317,24 @@ func PropagateTConfiguration(impl any, cfg *TConfiguration) {
 }
 
 func checkSizeForProtocol(size int32, cfg *TConfiguration) error {
+	return checkSizeForProtocolInt64(int64(size), cfg)
+}
+
+func checkSizeForProtocolMinSerializedSize(size int64, minSerializedSize int32, cfg *TConfiguration) error {
+	if err := checkSizeForProtocolInt64(size, cfg); err != nil {
+		return err
+	}
+	return checkSizeForProtocolInt64(size*int64(minSerializedSize), cfg)
+}
+
+func checkSizeForProtocolInt64(size int64, cfg *TConfiguration) error {
 	if size < 0 {
 		return NewTProtocolExceptionWithType(
 			NEGATIVE_SIZE,
 			fmt.Errorf("negative size: %d", size),
 		)
 	}
-	if size > cfg.GetMaxMessageSize() {
+	if size > int64(cfg.GetMaxMessageSize()) {
 		return NewTProtocolExceptionWithType(
 			SIZE_LIMIT,
 			fmt.Errorf("size exceeded max allowed: %d", size),
