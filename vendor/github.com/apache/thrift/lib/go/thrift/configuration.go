@@ -332,6 +332,26 @@ func checkSizeForProtocol(size int32, cfg *TConfiguration) error {
 	return nil
 }
 
+func checkMinSerializedSizeForProtocol(size int64, minElemSize int32, cfg *TConfiguration) error {
+	if size < 0 {
+		return NewTProtocolExceptionWithType(
+			NEGATIVE_SIZE,
+			fmt.Errorf("negative size: %d", size),
+		)
+	}
+	maxMessageSize := int64(cfg.GetMaxMessageSize())
+	if minElemSize > 0 {
+		maxMessageSize /= int64(minElemSize)
+	}
+	if size > maxMessageSize {
+		return NewTProtocolExceptionWithType(
+			SIZE_LIMIT,
+			fmt.Errorf("size exceeded max allowed: %d", size),
+		)
+	}
+	return nil
+}
+
 type tTransportFactoryConf struct {
 	delegate TTransportFactory
 	cfg      *TConfiguration
