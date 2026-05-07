@@ -140,8 +140,7 @@ func (t *PushTarget) handleLoki(w http.ResponseWriter, r *http.Request) {
 		keep := relabel.ProcessBuilder(lb, t.relabelConfig...)
 		processed := lb.Labels()
 		if !keep || processed.IsEmpty() {
-			w.WriteHeader(http.StatusNoContent)
-			return
+			continue
 		}
 
 		// Convert to model.LabelSet

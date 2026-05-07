@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"testing"
@@ -141,6 +142,54 @@ func TestLokiPushTarget(t *testing.T) {
 
 	_ = pt.Stop()
 
+}
+
+func TestLokiPushTargetContinuesAfterRelabelDrop(t *testing.T) {
+	w := log.NewSyncWriter(os.Stderr)
+	logger := log.NewLogfmtLogger(w)
+
+	eh := fake.New(func() {})
+	defer eh.Stop()
+
+	config := &scrapeconfig.PushTargetConfig{
+		MaxSendMsgSize: 100 << 20,
+		KeepTimestamp:  true,
+	}
+
+	rlbl := []*relabel.Config{
+		{
+			Action:       relabel.Drop,
+			SourceLabels: model.LabelNames{"drop"},
+			Regex:        relabel.MustNewRegexp("true"),
+		},
+	}
+
+	pt := &PushTarget{
+		logger:        logger,
+		handler:       eh,
+		config:        config,
+		relabelConfig: rlbl,
+	}
+
+	body := bytes.NewBufferString(`{"streams": [
+		{ "stream": { "stream": "stream1" }, "values": [ [ "1570818238000000000", "line1" ] ] },
+		{ "stream": { "stream": "stream2", "drop": "true" }, "values": [ [ "1570818238000000001", "line2" ] ] },
+		{ "stream": { "stream": "stream3" }, "values": [ [ "1570818238000000002", "line3" ] ] }
+	]}`)
+	req := httptest.NewRequest(http.MethodPost, "/loki/api/v1/push", body)
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	pt.handleLoki(recorder, req)
+
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+	require.Eventually(t, func() bool {
+		return len(eh.Received()) == 2
+	}, time.Second, time.Millisecond)
+
+	received := eh.Received()
+	require.Equal(t, "line1", received[0].Line)
+	require.Equal(t, "line3", received[1].Line)
 }
 
 func TestPlaintextPushTarget(t *testing.T) {
