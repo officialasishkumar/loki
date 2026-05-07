@@ -215,6 +215,26 @@ func Test_parseMessage_relable_config(t *testing.T) {
 	assert.Equal(t, model.LabelSet{"category": "FunctionAppLogs"}, entries[1].Labels)
 }
 
+func Test_parseMessage_relabel_drop(t *testing.T) {
+	messageParser := &messageParser{}
+
+	message := &sarama.ConsumerMessage{
+		Value: readFile(t, "testdata/function_app_logs_message.txt"),
+	}
+
+	relabelConfigs := testutils.ValidateRelabelConfig(t, []*relabel.Config{
+		{
+			SourceLabels: model.LabelNames{"__azure_event_hubs_category"},
+			Regex:        relabel.MustNewRegexp("FunctionAppLogs"),
+			Action:       "drop",
+		},
+	})
+
+	entries, err := messageParser.Parse(message, nil, relabelConfigs, true)
+	assert.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
 func Test_parseMessage_custom_message_and_logic_app_logs(t *testing.T) {
 	messageParser := &messageParser{}
 
