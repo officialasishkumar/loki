@@ -36,7 +36,6 @@ var (
 		"compactor.shared_store_key_prefix",
 		"limits_config.enforce_metric_name",
 		"limits_config.ruler_evaluation_delay_duration",
-		"limits_config.allow_deletes",
 	}
 
 	expectedConfigDeprecates = []string{
@@ -86,10 +85,8 @@ var (
 	expectedRuntimeConfigDeletes = []string{
 		"overrides.foo.ruler_evaluation_delay_duration",
 		"overrides.foo.enforce_metric_name",
-		"overrides.foo.allow_deletes",
 		"overrides.bar.ruler_evaluation_delay_duration",
 		"overrides.bar.enforce_metric_name",
-		"overrides.bar.allow_deletes",
 	}
 
 	expectedRuntimeConfigDeprecates = []string{
