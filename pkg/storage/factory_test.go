@@ -85,7 +85,7 @@ func TestNamedStores(t *testing.T) {
 				IndexTables: config.IndexPeriodicTableConfig{
 					PeriodicTableConfig: config.PeriodicTableConfig{
 						Prefix: "index_",
-						Period: time.Hour * 168,
+						Period: config.ObjectStorageIndexRequiredPeriod,
 					}},
 			},
 		},
