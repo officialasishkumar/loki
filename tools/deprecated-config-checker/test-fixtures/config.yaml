@@ -117,6 +117,7 @@ schema_config:
 
 limits_config:
   ingestion_rate_mb: 100
+  allow_deletes: true # DELETED
   unordered_writes: true # DEPRECATED
   enforce_metric_name: true # DELETED
   ruler_evaluation_delay_duration: 1m # DELETED

@@ -48,5 +48,6 @@ chunk_store_config:
   max_look_back_period: "Use global or per-tenant max_query_lookback configuration from limits_config."
 
 limits_config:
+  allow_deletes: "Use deletion_mode per tenant configuration instead."
   ruler_evaluation_delay_duration: "This setting is removed."
   enforce_metric_name: "This setting is removed."
