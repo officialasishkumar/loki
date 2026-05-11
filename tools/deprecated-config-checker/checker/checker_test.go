@@ -36,6 +36,7 @@ var (
 		"compactor.shared_store_key_prefix",
 		"limits_config.enforce_metric_name",
 		"limits_config.ruler_evaluation_delay_duration",
+		"limits_config.allow_deletes",
 	}
 
 	expectedConfigDeprecates = []string{
@@ -64,7 +65,6 @@ var (
 		"limits_config.ruler_remote_write_sigv4_config",
 		"limits_config.per_tenant_override_config",
 		"limits_config.per_tenant_override_period",
-		"limits_config.allow_deletes",
 		"schema_config.configs.[1].store",
 		"schema_config.configs.[1].object_store",
 		"schema_config.configs.[2].store",
@@ -86,8 +86,10 @@ var (
 	expectedRuntimeConfigDeletes = []string{
 		"overrides.foo.ruler_evaluation_delay_duration",
 		"overrides.foo.enforce_metric_name",
+		"overrides.foo.allow_deletes",
 		"overrides.bar.ruler_evaluation_delay_duration",
 		"overrides.bar.enforce_metric_name",
+		"overrides.bar.allow_deletes",
 	}
 
 	expectedRuntimeConfigDeprecates = []string{
@@ -107,7 +109,6 @@ var (
 		"overrides.foo.ruler_remote_write_sigv4_config",
 		"overrides.foo.per_tenant_override_config",
 		"overrides.foo.per_tenant_override_period",
-		"overrides.foo.allow_deletes",
 		"overrides.bar.unordered_writes",
 		"overrides.bar.ruler_remote_write_url",
 		"overrides.bar.ruler_remote_write_timeout",
@@ -124,7 +125,6 @@ var (
 		"overrides.bar.ruler_remote_write_sigv4_config",
 		"overrides.bar.per_tenant_override_config",
 		"overrides.bar.per_tenant_override_period",
-		"overrides.bar.allow_deletes",
 	}
 )
 
