@@ -110,6 +110,20 @@ func (w *zstdWriter) Append(arr columnar.Array) error {
 		dataEnd    = srcOffsets[len(srcOffsets)-1]
 	)
 
+	// Validate before any mutation so a failed Append leaves the writer's
+	// state unchanged.
+	if err := validateNulls(w.validity, utf8Arr, utf8Arr.Len()); err != nil {
+		return err
+	}
+
+	// Fall through to the utility method to handle nulls (including whether our
+	// type is not nullable).
+	nulls, err := appendNulls(w.alloc, w.validity, utf8Arr, utf8Arr.Len())
+	if err != nil {
+		return err
+	}
+	w.nulls += nulls
+
 	// Append only the referenced data range. Sliced UTF8 arrays share the
 	// full parent data buffer, so srcData may contain bytes outside the
 	// offset range.
@@ -135,14 +149,6 @@ func (w *zstdWriter) Append(arr columnar.Array) error {
 		}
 		w.rows += utf8Arr.Len()
 	}
-
-	// Fall through to the utility method to handle nulls (including whether our
-	// type is not nullable).
-	nulls, err := appendNulls(w.alloc, w.validity, utf8Arr, utf8Arr.Len())
-	if err != nil {
-		return err
-	}
-	w.nulls += nulls
 	return nil
 }
 
