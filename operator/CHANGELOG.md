@@ -1,5 +1,19 @@
 ## Main
 
+## [0.10.2](https://github.com/grafana/loki/compare/operator/v0.10.1...operator/v0.10.2) (2026-05-11)
+
+
+### Features
+
+* **operator:** Update ServiceMonitors to use serviceDiscoveryRole: EndpointSlice ([#21731](https://github.com/grafana/loki/issues/21731)) ([d3a12c7](https://github.com/grafana/loki/commit/d3a12c766f06a333984632610dcb6a69067f51bf))
+
+
+### Bug Fixes
+
+* **operator:** Fix RemoteWriteAuthType CEL validation in RulerConfig ([#21677](https://github.com/grafana/loki/issues/21677)) ([50e5873](https://github.com/grafana/loki/commit/50e58735302444eb0c9f1d9eb4ad0d4eb3726370))
+* **operator:** Replace local pkg/push dependency with published module ([#21679](https://github.com/grafana/loki/issues/21679)) ([752874f](https://github.com/grafana/loki/commit/752874f76e758cbb42c3f299d56e7c7282029ae7))
+* **operator:** Ruler doesn't evaluate rules due to use_thanos_objstore ([#21713](https://github.com/grafana/loki/issues/21713)) ([d0b1ea0](https://github.com/grafana/loki/commit/d0b1ea0f2ea0c8f1370bb873d3439fa3626b29ee))
+
 ## [0.10.1](https://github.com/grafana/loki/compare/operator/v0.10.0...operator/v0.10.1) (2026-04-16)
 
 
